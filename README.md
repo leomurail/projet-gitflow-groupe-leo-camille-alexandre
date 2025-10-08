@@ -44,9 +44,5 @@ Le modèle Git Flow est basé sur la coexistence de deux branches permanentes (`
 | :--- | :--- | :--- | :--- | :--- |
 | **Feature** | `feature/ajouter-chat-live` | **`develop`** | **`develop`** | Développement d'une nouvelle fonctionnalité majeure. Isoler le code jusqu'à ce qu'il soit complet et prêt pour l'intégration. |
 | **Release** | `release/v2.1.0` | **`develop`** | **`main`** **et** **`develop`** | Préparation du lancement d'une nouvelle version. Permet les tests finaux, la documentation, et les corrections liées à la version. |
-<<<<<<< Updated upstream
 | **Hotfix** | `hotfix/corriger-paiement-paypal` | **`main`** | **`main`** **et** **`develop`** | Correction rapide d'un bug critique ou d'une faille de sécurité en production. Doit être déployé immédiatement sans attendre le cycle de `release`. |
 
-=======
-| **Hotfix** | `hotfix/corriger-paiement-paypal` | **`main`** | **`main`** **et** **`develop`** | Correction rapide d'un bug critique ou d'une faille de sécurité en production. Doit être déployé immédiatement sans attendre le cycle de `release`. |
->>>>>>> Stashed changes
