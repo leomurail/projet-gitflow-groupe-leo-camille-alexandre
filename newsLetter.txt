@@ -1,1 +1,3 @@
 Nous allons ajouter une News Letter a notre evenement
+
+Issue : #4
