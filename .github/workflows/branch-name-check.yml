@@ -2,22 +2,51 @@ name: 🧩 Check branch naming (Git Flow)
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch: {}  # pour tester manuellement si besoin
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   check-branch-name:
     runs-on: ubuntu-latest
-    env:
-      BRANCH_NAME: ${{ github.head_ref != '' && github.head_ref || github.ref_name }}
-      BRANCH_REGEX: '^(feature\/.+|release\/[0-9]+\.[0-9]+\.[0-9]+|hotfix\/[0-9]+\.[0-9]+\.[0-9]+)$'
     steps:
-      - name: Check branch naming
+      - name: Determine branch name
+        id: b
+        shell: bash
         run: |
-          echo "🔎 Vérification du nom de la branche : $BRANCH_NAME"
-          if [[ "$BRANCH_NAME" =~ $BRANCH_REGEX ]]; then
-            echo "✅ Nom valide selon Git Flow."
+          # Sur un event pull_request, c'est le nom de la branche source de la PR
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          if [ -z "$BRANCH_NAME" ]; then
+            # fallback (ex. run manuel)
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+          echo "🔎 Branch détectée: $BRANCH_NAME"
+
+      - name: Validate against allowed patterns
+        shell: bash
+        run: |
+          BRANCH="${{ steps.b.outputs.branch }}"
+
+          # Autorisés :
+          # - main
+          # - develop
+          # - feature/<qqchose>
+          # - release/x.y.z
+          # - hotfix/x.y.z
+          REGEX='^(main|develop|feature\/[A-Za-z0-9._-]+|release\/[0-9]+\.[0-9]+\.[0-9]+|hotfix\/[0-9]+\.[0-9]+\.[0-9]+)$'
+
+          if [[ "$BRANCH" =~ $REGEX ]]; then
+            echo "✅ Nom de branche valide."
           else
-            echo "::error::🚫 Nom de branche invalide : '$BRANCH_NAME'"
-            echo "Attendu : feature/<nom> ou release/x.y.z ou hotfix/x.y.z"
+            echo "::error::🚫 Nom de branche invalide: '$BRANCH'."
+            echo "::error::Attendu: 'main', 'develop', 'feature/<nom>', 'release/x.y.z' ou 'hotfix/x.y.z'."
+            echo "Exemples valides :"
+            echo " - feature/login-page"
+            echo " - release/1.2.3"
+            echo " - hotfix/1.2.4"
             exit 1
           fi
