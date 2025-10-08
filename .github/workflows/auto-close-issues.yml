@@ -1,0 +1,124 @@
+name: 🔧 Auto-close referenced issues on push
+
+on:
+  push:  # se déclenche sur chaque push, toutes branches
+
+permissions:
+  contents: read
+  issues: write    # nécessaire pour commenter/fermer les issues
+
+jobs:
+  close-referenced-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse commits and close referenced issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = context.repo;
+            const ref = context.ref || ''; // ex: 'refs/heads/feature/x'
+            const branchName = ref.replace('refs/heads/','');
+
+            // Récupère la liste des commits inclus dans le push
+            let commits = context.payload.commits || [];
+
+            // Fallback de robustesse si la liste est vide (cas edge ou gros push) :
+            if (!commits.length && context.payload.before && context.payload.after) {
+              core.info('No commits in payload; using compareCommits fallback.');
+              const cmp = await github.rest.repos.compareCommitsWithBasehead({
+                owner: repo.owner,
+                repo: repo.repo,
+                basehead: `${context.payload.before}...${context.payload.after}`,
+              });
+              commits = (cmp.data.commits || []).map(c => ({
+                id: c.sha,
+                message: c.commit.message,
+                url: c.html_url,
+              }));
+            }
+
+            // Regex: mots-clés + #numéro (insensible à la casse)
+            const re = /(?:fixes|fixed|closes|closed|resolves|resolved)\s*#(\d+)/ig;
+
+            // Pour éviter de traiter deux fois la même issue dans un même push
+            const handled = new Set();
+
+            for (const c of commits) {
+              const message = c.message || '';
+              const sha = c.id || '';
+              const shortSha = sha.substring(0,7);
+              const commitUrl = `${context.payload.repository.html_url}/commit/${sha}`;
+
+              let m;
+              while ((m = re.exec(message)) !== null) {
+                const issueNumber = Number(m[1]);
+                const key = `${issueNumber}:${sha}`;
+                if (handled.has(key)) continue;
+                handled.add(key);
+
+                core.info(`Commit ${shortSha} mentions #${issueNumber}`);
+
+                // Récupère l'issue pour vérifier que ce n'est PAS une Pull Request
+                let issue;
+                try {
+                  const { data } = await github.rest.issues.get({
+                    owner: repo.owner,
+                    repo: repo.repo,
+                    issue_number: issueNumber,
+                  });
+                  issue = data;
+                } catch (err) {
+                  core.warning(`Issue #${issueNumber} introuvable: ${err.message}`);
+                  continue;
+                }
+
+                // Ignore les PRs (les PRs sont aussi des "issues" avec le champ pull_request)
+                if (issue.pull_request) {
+                  core.info(`Référence #${issueNumber} est une Pull Request — ignorée.`);
+                  continue;
+                }
+
+                // Ajoute un commentaire indiquant la branche et le commit
+                const commentBody = [
+                  `🔒 Fermeture automatique via commit **${shortSha}** sur la branche **${branchName}**.`,
+                  ``,
+                  `- Commit: ${commitUrl}`,
+                  `- Branche: \`${branchName}\``,
+                  ``,
+                  `> Déclenchée par le mot-clé dans le message de commit:`,
+                  `> \`${message.split('\n')[0]}\``,
+                ].join('\n');
+
+                try {
+                  await github.rest.issues.createComment({
+                    owner: repo.owner,
+                    repo: repo.repo,
+                    issue_number: issueNumber,
+                    body: commentBody,
+                  });
+                } catch (err) {
+                  core.warning(`Impossible d'ajouter un commentaire sur #${issueNumber}: ${err.message}`);
+                }
+
+                // Ferme l'issue (si elle n'est pas déjà fermée)
+                if (issue.state !== 'closed') {
+                  try {
+                    await github.rest.issues.update({
+                      owner: repo.owner,
+                      repo: repo.repo,
+                      issue_number: issueNumber,
+                      state: 'closed',
+                    });
+                    core.info(`Issue #${issueNumber} fermée.`);
+                  } catch (err) {
+                    core.warning(`Échec de la fermeture de #${issueNumber}: ${err.message}`);
+                  }
+                } else {
+                  core.info(`Issue #${issueNumber} déjà fermée — commentaire ajouté uniquement.`);
+                }
+              }
+            }
+
+            if (!commits.length) {
+              core.info('Aucun commit à analyser dans ce push.');
+            }
