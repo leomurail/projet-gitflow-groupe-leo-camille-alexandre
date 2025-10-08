@@ -1,0 +1,23 @@
+name: 🧩 Check branch naming (Git Flow)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    env:
+      BRANCH_NAME: ${{ github.head_ref != '' && github.head_ref || github.ref_name }}
+      BRANCH_REGEX: '^(feature\/.+|release\/[0-9]+\.[0-9]+\.[0-9]+|hotfix\/[0-9]+\.[0-9]+\.[0-9]+)$'
+    steps:
+      - name: Check branch naming
+        run: |
+          echo "🔎 Vérification du nom de la branche : $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" =~ $BRANCH_REGEX ]]; then
+            echo "✅ Nom valide selon Git Flow."
+          else
+            echo "::error::🚫 Nom de branche invalide : '$BRANCH_NAME'"
+            echo "Attendu : feature/<nom> ou release/x.y.z ou hotfix/x.y.z"
+            exit 1
+          fi
